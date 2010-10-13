@@ -14,13 +14,14 @@ if (typeof Array.prototype.inArray != 'function')
 function html5Preloader()
 {
 	var that = this, fileData = [], fileLoadingList = [], playableAudioTypes = [], playableVideoTypes = [], nonplayableAudioTypes = [], nonplayableVideoTypes = [],
-	audioElementSupport, audioMimeTypes, audioFileExtensions, videoElementSupport, videoMimeTypes, videoFileExtensions, SND, VID, i;
+	audioElementSupport, audioMimeTypes, audioFileExtensions, videoElementSupport, videoMimeTypes, videoFileExtensions, SND, VID, i, supportedImageTypes = ['jpg', 'png', 'apng', 'tiff', 'svg', 'jpeg', 'pnga', 'gif'];
 
 	this.addFiles = function()
 	{
-		var i, n, filepathSplit, fileIdentifier, filepath, fileExtensionSplit, fileDataType, previousState;
+		var i, n, filepathSplit, fileIdentifier, filepath, fileExtensionSplit, fileDataType, previousState, firstAlternate, alternates = [];
 		for(i=0; i<arguments.length; i++)
 		{
+			alternates = [];
 			filepathSplit = arguments[i].split('*:');
 			fileIdentifier = filepathSplit[0];
 			filepath = filepathSplit[filepathSplit.length-1].split('||');
@@ -30,11 +31,10 @@ function html5Preloader()
 				fileExtensionSplit = fileExtensionSplit[fileExtensionSplit.length-1].toLowerCase();
 				fileDataType = getType(fileExtensionSplit);
 				if (fileDataType != 'unsupported')
-				{
-					fileLoadingList.push({identifier: fileIdentifier, datatype: fileDataType, filepath: filepath[n]});
-					break;
-				}
+					alternates.push({datatype: fileDataType, filepath: filepath[n]});
 			}
+			firstAlternate = alternates.shift();
+			fileLoadingList.push({identifier: fileIdentifier, datatype: firstAlternate.datatype, filepath: firstAlternate.filepath, alternates: alternates});
 		}
 		if (fileLoadingList.length > 0)
 		{
@@ -73,18 +73,13 @@ function html5Preloader()
 			return 'video';
 		if (nonplayableAudioTypes.inArray(ext) || nonplayableVideoTypes.inArray(ext))
 			return 'unsupported';
-		if
-		(
-			ext == 'jpg' ||
-			ext == 'jpeg' ||
-			ext == 'png'
-		)
+		if (supportedImageTypes.inArray(ext))
 			return 'image';
 		return 'document';
 	}
 	function loadAudio(filedata){
 		var snd, theloader
-		try // IE doesn't support Audio(), and Mozilla doesn't support canplaythrough with document.createElement, so this is what I came up with.
+		try // IE9 doesn't support Audio(), and Mozilla doesn't support canplaythrough with document.createElement, so this is what I came up with.
 		{
 			snd = new Audio();
 		}catch(e){
@@ -94,12 +89,12 @@ function html5Preloader()
 		theloader = that;
 		snd.addEventListener('canplaythrough', function (){theloader.loadSequence();}, true);
 		snd.onerror = function(e){theloader.triggerError(e);};
-		fileData.push({identifier: filedata.identifier, filepath: filedata.filepath, datatype: filedata.filepath, data: snd});
+		fileData.push({identifier: filedata.identifier, filepath: filedata.filepath, datatype: filedata.filepath, alternates: filedata.alternates, data: snd});
 		snd.load();
 	}
 	function loadVideo(filedata){
 		var vid, theloader;
-		try // IE doesn't support Video(), and Mozilla doesn't support canplaythrough with document.createElement, so this is what I came up with.
+		try // IE9 doesn't support Video(), and Mozilla doesn't support canplaythrough with document.createElement, so this is what I came up with.
 		{
 			vid = new Video();
 		}catch(e){
@@ -109,7 +104,7 @@ function html5Preloader()
 		theloader = that;
 		vid.addEventListener('canplaythrough', function (){theloader.loadSequence();}, true);
 		vid.onerror = function(e){theloader.triggerError(e);};
-		fileData.push({identifier: filedata.identifier, filepath: filedata.filepath, datatype: filedata.filepath, data: vid});
+		fileData.push({identifier: filedata.identifier, filepath: filedata.filepath, datatype: filedata.filepath, alternates: filedata.alternates, data: vid});
 		vid.load();
 	}
 	function loadImage(filedata)
@@ -118,11 +113,11 @@ function html5Preloader()
 		img.src = filedata.filepath;
 		img.onload = function (){theloader.loadSequence();};
 		img.onerror = function(e){theloader.triggerError(e);};
-		fileData.push({identifier: filedata.identifier, filepath: filedata.filepath, datatype: filedata.filepath, data: img});
+		fileData.push({identifier: filedata.identifier, filepath: filedata.filepath, datatype: filedata.filepath, alternates: filedata.alternates, data: img});
 	}
 	function loadDocument(filedata)
 	{
-		fileData.push({identifier: filedata.identifier, filepath: filedata.filepath, datatype: filedata.filepath, data: false});
+		fileData.push({identifier: filedata.identifier, filepath: filedata.filepath, datatype: filedata.filepath, alternates: filedata.alternates, data: false});
 		if (!jQuery || !jQuery.ajax)
 			return that.loadSequence;
 		var theloader = that,
@@ -136,6 +131,21 @@ function html5Preloader()
 	}
 	this.triggerError = function(e)
 	{
+		var i, currentFile, currentAlternate;
+		for (i=0; i<fileData.length; i++) if (fileData[i].identifier == that.nowLoading)
+		{
+			currentFile = fileData[i];
+			break;
+		}
+		if (currentFile.alternates.length > 0)
+		{
+			currentAlternate = currentFile.alternates.shift();
+			currentFile.filepath = currentAlternate.filepath;
+			currentFile.datatype = currentAlternate.datatype;
+			fileLoadingList.unshift(currentFile);
+			that.removeFile(that.nowLoading);
+			return that.loadSequence();
+		}
 		if (this.active && this.onerror(e))
 			that.loadSequence();
 	}
@@ -190,7 +200,7 @@ html5Preloader.prototype =
 	active: false,
 	filesLoaded: 0,
 	nowLoading: '',
-	version: 0.3,
+	version: 0.5,
 	onfinish: function(){},
 	onerror: function(e){return true;}
 };
