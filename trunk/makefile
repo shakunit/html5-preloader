@@ -1,6 +1,6 @@
 # html5-preloader
 # http://code.google.com/p/html5-preloader 
-ver=0.4
+ver=0.5
 
 all: full lite min
 
